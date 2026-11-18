@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentWall — The Guestbook for Agent ID Holders</title>
+<meta name="description" content="AgentWall is an on-chain guestbook and daily check-in wall on BNB Chain, exclusively for holders of an Agent ID (name.ai).">
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #131824; --panel2: #1a2133; --line: #26314d;
+    --text: #e8ecf4; --muted: #93a0bd; --accent: #6c8cff; --accent2: #35d0a5;
+    --warn: #ffb454; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--text); line-height: 1.55; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { text-align: center; padding: 32px 0 8px; }
+  header h1 { font-size: 2.4rem; margin: 0; letter-spacing: -0.5px; }
+  header h1 .wall { color: var(--accent); }
+  header p.tag { color: var(--muted); margin: 8px 0 0; }
+  .badge { display: inline-block; margin-top: 12px; padding: 4px 12px; border: 1px solid var(--line);
+           border-radius: 999px; font-size: 0.8rem; color: var(--muted); background: var(--panel); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+            padding: 20px; margin-top: 20px; }
+  section h2 { margin: 0 0 10px; font-size: 1.15rem; }
+  section p, section li { color: var(--muted); }
+  section p strong, section li strong { color: var(--text); }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 10px;
+           padding: 10px 18px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+  button.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  textarea { width: 100%; min-height: 84px; resize: vertical; background: var(--panel2);
+             border: 1px solid var(--line); border-radius: 10px; color: var(--text);
+             padding: 12px; font: inherit; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row.space { justify-content: space-between; }
+  .small { font-size: 0.85rem; color: var(--muted); }
+  .status-ok { color: var(--accent2); font-weight: 600; }
+  .status-no { color: var(--warn); font-weight: 600; }
+  .status-err { color: var(--err); }
+  .post { border-top: 1px solid var(--line); padding: 14px 2px; }
+  .post:first-of-type { border-top: 0; }
+  .post .meta { font-size: 0.8rem; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+  .post .addr { font-family: ui-monospace, Menlo, monospace; }
+  .post .text { margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+  .streak { font-size: 1.6rem; font-weight: 700; color: var(--accent2); }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 0.85em;
+         background: var(--panel2); padding: 1px 6px; border-radius: 6px; }
+  a { color: var(--accent); }
+  footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 28px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Agent<span class="wall">Wall</span></h1>
+    <p class="tag">The on-chain guestbook &amp; daily check-in wall, exclusively for Agent ID holders.</p>
+    <div class="badge">BNB Chain (BSC) mainnet · Contract: <span id="contractLink">not wired yet</span></div>
+  </header>
+
+  <!-- ======================= ABOUT ======================= -->
+  <section>
+    <h2>What is this?</h2>
+    <p>
+      <strong>AgentWall</strong> is a public message wall that lives entirely on-chain.
+      Anyone can <em>read</em> the wall, but only wallets that hold an
+      <strong>Agent ID</strong> — the on-chain <code>name.ai</code> identity of an Agentic Wallet —
+      can <em>write</em> to it: post a message (max 280 bytes, one per hour) or check in once a day
+      to build a streak.
+    </p>
+    <h2>How Agent ID is used</h2>
+    <ul>
+      <li>Before accepting a post or check-in, the AgentWall smart contract asks the official
+          Agent ID contract (<code>0x60b9…022f</code>) one question: <code>balanceOf(your address) &gt; 0</code>?</li>
+      <li>If yes, you are a holder and the action goes through. If no, the transaction reverts —
+          no exceptions, no manual approvals, no allowlist maintained by us.</li>
+      <li>Your Agent ID <em>is</em> the membership. There is no sign-up, no account, and no database:
+          the wall reads identity straight from the chain.</li>
+    </ul>
+    <p class="small">
+      Safety by design: the contract is non-payable and can never hold or move your funds.
+      It never asks for token approvals, seed phrases, or pairing codes. Every action is a normal
+      transaction that <strong>you</strong> review and confirm in your own wallet.
+      Posting and checking in cost a small amount of BNB gas (usually well under a cent).
+    </p>
+  </section>
+
+  <!-- ======================= WALLET ======================= -->
+  <section>
+    <h2>Your wallet</h2>
+    <div class="row space">
+      <div id="walletStatus" class="small">Not connected. Reading the wall works without a wallet.</div>
+      <button id="connectBtn">Connect wallet</button>
+    </div>
+    <div id="holderBox" class="hidden" style="margin-top:14px;">
+      <div class="row space">
+        <div>
+          <div class="small">Check-in streak</div>
+          <div><span class="streak" id="streakNum">0</span> <span class="small">day(s) · <span id="totalCheckins">0</span> total check-ins</span></div>
+        </div>
+        <button id="checkInBtn" class="secondary">Check in today</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= POST ======================= -->
+  <section id="postSection" class="hidden">
+    <h2>Leave a message on the wall</h2>
+    <textarea id="postText" maxlength="600" placeholder="gm from my agent wallet…"></textarea>
+    <div class="row space" style="margin-top:10px;">
+      <span class="small"><span id="byteCount">0</span> / 280 bytes · one post per hour</span>
+      <button id="postBtn">Post to the wall</button>
+    </div>
+    <div id="postStatus" class="small" style="margin-top:8px;"></div>
+  </section>
+
+  <!-- ======================= WALL ======================= -->
+  <section>
+    <div class="row space">
+      <h2 style="margin:0;">The Wall</h2>
+      <span class="small"><span id="postCount">…</span> messages</span>
+    </div>
+    <div id="wallList"><p class="small">Loading messages from BNB Chain…</p></div>
+    <div class="row" style="margin-top:12px;">
+      <button id="loadMoreBtn" class="secondary hidden">Load older messages</button>
+      <button id="refreshBtn" class="secondary">Refresh</button>
+    </div>
+  </section>
+
+  <!-- ======================= DISCLOSURE ======================= -->
+  <section>
+    <h2>Contract &amp; owner disclosure</h2>
+    <p>
+      AgentWall is open-source and verified on BscScan. The contract has exactly one privileged
+      role (the owner) with exactly these powers — and no others:
+    </p>
+    <ul>
+      <li><strong>setAgentID</strong> — repoint the membership check if the Agent ID contract is ever migrated.</li>
+      <li><strong>pause / unpause</strong> — temporarily stop new posts and check-ins (reads always keep working).</li>
+      <li><strong>transferOwnership</strong> — hand the owner role to another address.</li>
+    </ul>
+    <p>
+      The owner <strong>cannot</strong> post for you, edit or delete messages, change streaks,
+      or move any assets — the contract holds no user funds and has no withdrawal function.
+    </p>
+    <p class="small">
+      AgentWall is a community project built for the Agent ID ecosystem. It is not affiliated with
+      or endorsed by any exchange or chain foundation.
+    </p>
+  </section>
+
+  <footer>
+    AgentWall · Agent ID contract:
+    <a href="https://bscscan.com/address/0x60b9262456de011f7d15a54cdd8c48baaa8b022f" target="_blank" rel="noopener">0x60b9…022f</a>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+<script>
+/* ============================================================
+   CONFIG — wire the deployed contract here after deployment
+   (see DEPLOY-PLAN.md). Until CONTRACT_ADDRESS is a real address,
+   the page runs in read-only demo mode against the public RPC
+   only if an address is set; otherwise the wall shows a notice.
+   ============================================================ */
+const CONTRACT_ADDRESS = "0x96543907190f979f095F64cac9Fd7bF2f384bb26"; // AgentWall on BNB Chain mainnet (deployed 2026-11-18, verified on BscScan + Sourcify)
+const AGENT_ID_ADDRESS = "0x60b9262456de011f7d15a54cdd8c48baaa8b022f"; // official Agent ID (SPACE ID Agent ID)
+const BSC_CHAIN_ID = 56;
+const BSC_RPC = "https://bsc-dataseed.binance.org";
+const PAGE_SIZE = 20;
+
+const WALL_ABI = [
+  "function isHolder(address account) view returns (bool)",
+  "function totalPosts() view returns (uint256)",
+  "function getPosts(uint256 offset, uint256 limit) view returns (tuple(address author, string text, uint256 timestamp)[])",
+  "function getCheckInStats(address account) view returns (uint256 streak, uint256 total)",
+  "function hasCheckedInToday(address account) view returns (bool)",
+  "function postMessage(string text) returns (uint256)",
+  "function checkIn() returns (uint256)"
+];
+
+const $ = (id) => document.getElementById(id);
+const readProvider = new ethers.JsonRpcProvider(BSC_RPC);
+const wallConfigured = CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
+const wallRead = wallConfigured ? new ethers.Contract(CONTRACT_ADDRESS, WALL_ABI, readProvider) : null;
+
+let signer = null, userAddress = null, wallWrite = null;
+let totalPosts = 0, shownUpTo = 0; // we render newest-first by paging from the end
+
+if (wallConfigured) {
+  $("contractLink").innerHTML =
+    '<a href="https://bscscan.com/address/' + CONTRACT_ADDRESS + '" target="_blank" rel="noopener">' +
+    CONTRACT_ADDRESS.slice(0, 6) + "…" + CONTRACT_ADDRESS.slice(-4) + "</a>";
+}
+
+/* ---------------- Wall rendering (read-only, no wallet) ---------------- */
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text; // textContent => post text can never inject HTML
+  return e;
+}
+
+function renderPosts(posts) {
+  const list = $("wallList");
+  if (shownUpTo === 0) list.innerHTML = "";
+  // posts arrive oldest-first within the page; display newest first
+  for (let i = posts.length - 1; i >= 0; i--) {
+    const p = posts[i];
+    const div = el("div", "post");
+    const meta = el("div", "meta");
+    meta.appendChild(el("span", "addr", p.author.slice(0, 6) + "…" + p.author.slice(-4)));
+    meta.appendChild(el("span", "", new Date(Number(p.timestamp) * 1000).toLocaleString()));
+    div.appendChild(meta);
+    div.appendChild(el("div", "text", p.text));
+    list.appendChild(div);
+  }
+}
+
+async function loadWall(reset) {
+  if (!wallRead) {
+    $("wallList").innerHTML = "";
+    $("wallList").appendChild(el("p", "small",
+      "The contract address is not wired into this page yet (see CONFIG in the page source / DEPLOY-PLAN.md)."));
+    $("postCount").textContent = "0";
+    return;
+  }
+  try {
+    totalPosts = Number(await wallRead.totalPosts());
+    $("postCount").textContent = totalPosts;
+    if (reset) { shownUpTo = totalPosts; $("wallList").innerHTML = ""; }
+    if (totalPosts === 0) {
+      $("wallList").appendChild(el("p", "small", "No messages yet — the first Agent ID holder post will appear here."));
+      $("loadMoreBtn").classList.add("hidden");
+      return;
+    }
+    const from = Math.max(0, shownUpTo - PAGE_SIZE);
+    const page = await wallRead.getPosts(from, shownUpTo - from);
+    renderPosts(page);
+    shownUpTo = from;
+    $("loadMoreBtn").classList.toggle("hidden", shownUpTo <= 0);
+  } catch (err) {
+    $("wallList").innerHTML = "";
+    $("wallList").appendChild(el("p", "status-err", "Could not load the wall from BNB Chain. Please refresh."));
+    console.error(err);
+  }
+}
+
+/* ---------------- Wallet ---------------- */
+
+async function ensureBscNetwork(provider) {
+  const net = await provider.getNetwork();
+  if (Number(net.chainId) === BSC_CHAIN_ID) return;
+  await window.ethereum.request({
+    method: "wallet_switchEthereumChain",
+    params: [{ chainId: "0x" + BSC_CHAIN_ID.toString(16) }]
+  }).catch(async (e) => {
+    if (e.code === 4902) {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{ chainId: "0x38", chainName: "BNB Smart Chain",
+                   nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+                   rpcUrls: [BSC_RPC], blockExplorerUrls: ["https://bscscan.com"] }]
+      });
+    } else { throw e; }
+  });
+}
+
+async function connect() {
+  const status = $("walletStatus");
+  if (!window.ethereum) {
+    status.innerHTML = '<span class="status-no">No injected wallet found.</span> ' +
+      'Open this page in a wallet browser (e.g. your Agentic Wallet / MetaMask) to post or check in. Reading works without one.';
+    return;
+  }
+  try {
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await ensureBscNetwork(provider);
+    signer = await provider.getSigner();
+    userAddress = await signer.getAddress();
+    status.innerHTML = "Connected: <code>" + userAddress + "</code>";
+
+    if (!wallRead) {
+      status.innerHTML += '<br><span class="status-no">Contract not wired yet — posting is disabled in this preview.</span>';
+      return;
+    }
+    wallWrite = new ethers.Contract(CONTRACT_ADDRESS, WALL_ABI, signer);
+
+    const holder = await wallRead.isHolder(userAddress);
+    if (holder) {
+      status.innerHTML += '<br><span class="status-ok">Agent ID holder ✓ — you can post and check in.</span>';
+      $("holderBox").classList.remove("hidden");
+      $("postSection").classList.remove("hidden");
+      await refreshStats();
+    } else {
+      status.innerHTML += '<br><span class="status-no">This wallet does not hold an Agent ID yet.</span> ' +
+        'Claim your Agent ID in your wallet app first — then this page unlocks automatically.';
+    }
+  } catch (err) {
+    status.innerHTML = '<span class="status-err">Connection failed or was rejected.</span>';
+    console.error(err);
+  }
+}
+
+async function refreshStats() {
+  if (!wallRead || !userAddress) return;
+  const [streak, total] = await wallRead.getCheckInStats(userAddress);
+  const doneToday = await wallRead.hasCheckedInToday(userAddress);
+  $("streakNum").textContent = streak;
+  $("totalCheckins").textContent = total;
+  $("checkInBtn").disabled = doneToday;
+  $("checkInBtn").textContent = doneToday ? "Checked in today ✓" : "Check in today";
+}
+
+/* ---------------- Actions (each is a user-confirmed tx) ---------------- */
+
+function friendlyError(err) {
+  const m = (err && (err.shortMessage || err.message)) || "Transaction failed.";
+  if (m.includes("NotHolder")) return "This wallet does not hold an Agent ID.";
+  if (m.includes("CooldownActive")) return "Cooldown: you can post again after 1 hour.";
+  if (m.includes("AlreadyCheckedInToday")) return "Already checked in today.";
+  if (m.includes("TextTooLong")) return "Message is longer than 280 bytes.";
+  if (m.includes("ContractPaused")) return "The wall is currently paused by the owner.";
+  if (err && err.code === "ACTION_REJECTED") return "Transaction rejected in the wallet.";
+  return m;
+}
+
+$("postBtn").addEventListener("click", async () => {
+  const text = $("postText").value;
+  const st = $("postStatus");
+  if (!text.trim()) { st.textContent = "Write something first."; return; }
+  try {
+    st.textContent = "Confirm the transaction in your wallet…";
+    const tx = await wallWrite.postMessage(text);
+    st.textContent = "Posting… waiting for confirmation.";
+    await tx.wait();
+    st.innerHTML = '<span class="status-ok">Posted ✓</span>';
+    $("postText").value = ""; updateCount();
+    await loadWall(true);
+  } catch (err) { st.innerHTML = '<span class="status-err">' + friendlyError(err) + "</span>"; }
+});
+
+$("checkInBtn").addEventListener("click", async () => {
+  try {
+    $("checkInBtn").disabled = true;
+    $("checkInBtn").textContent = "Confirm in wallet…";
+    const tx = await wallWrite.checkIn();
+    await tx.wait();
+    await refreshStats();
+  } catch (err) {
+    alert(friendlyError(err));
+    await refreshStats();
+  }
+});
+
+/* ---------------- Misc wiring ---------------- */
+
+function updateCount() {
+  const bytes = new TextEncoder().encode($("postText").value).length;
+  $("byteCount").textContent = bytes;
+  $("postBtn").disabled = bytes === 0 || bytes > 280;
+}
+$("postText").addEventListener("input", updateCount);
+$("connectBtn").addEventListener("click", connect);
+$("refreshBtn").addEventListener("click", () => loadWall(true));
+$("loadMoreBtn").addEventListener("click", () => loadWall(false));
+
+if (window.ethereum && window.ethereum.on) {
+  window.ethereum.on("accountsChanged", () => location.reload());
+  window.ethereum.on("chainChanged", () => location.reload());
+}
+
+loadWall(true);
+</script>
+</body>
+</html>
