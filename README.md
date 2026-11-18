@@ -7,6 +7,10 @@ before accepting any post or check-in. Everyone can read; only holders can write
 
 **Status (2026-11-18): DEPLOYED on BSC mainnet; source verified on Sourcify
 (exact match) AND natively on BscScan — both completed 2026-11-18.**
+**Live website: https://mangfiksi.github.io/agentwall/** (GitHub Pages from
+this repo's public mirror, https://github.com/MangFiksi/agentwall).
+First on-chain interactions done 2026-11-18 (creator's first post + check-in;
+interaction count for the Innovation Award: 1 / 30).
 Deployed through the canonical CREATE2 factory
 (`0x4e59b44847b379578588920cA78FbF26c0B4956C`), because the owner's Agentic
 Wallet (`baw contract-call`) needs a `to` address and cannot send a bare
